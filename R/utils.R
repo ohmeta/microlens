@@ -185,6 +185,7 @@ ohmeta_theme <- ggpubr::theme_pubr() +
 # 3D ordination visualization
 plot_3d_ordination_auto <- function(
   data,
+  title = "3D Ordination Plot",
   group_col,
   sample_col,
   color_list = NULL,
@@ -287,7 +288,7 @@ plot_3d_ordination_auto <- function(
   # --- 4. Setup Layout ---
   fig <- plotly::layout(
     p = fig,
-    title = list(text = "3D Ordination Plot", y = 0.95),
+    title = list(text = title, y = 0.95),
     legend = list(
       title = list(
         text = paste0('<b>', group_col, '</b>'),
@@ -377,6 +378,7 @@ plot_3d_ordination_auto <- function(
 #' @export
 save_3d_rotation <- function(
   data,
+  title,
   filename = "ordination_rotation.gif",
   frames = 90,
   fps = 20,
@@ -429,6 +431,7 @@ save_3d_rotation <- function(
     # and instead freeze the camera at these specific coordinates.
     p <- plot_3d_ordination_auto(
       data = data,
+      title = title,
       manual_eye = eye_pos,
       radius = radius,
       ...
