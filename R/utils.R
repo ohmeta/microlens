@@ -1,7 +1,7 @@
 condition2_color <-
   c(
-    "Infant stool" = "#d55e00",
-    "Infant nasal" = "#56b4e9"
+    "Infant nasal" = "#56b4e9",
+    "Infant stool" = "#d55e00"
   )
 
 condition2_color_t <-
@@ -191,7 +191,8 @@ plot_3d_ordination_auto <- function(
   color_list = NULL,
   radius = 2.5,
   axis_pattern = "^PCo|^PC|^Axis|^MDS",
-  manual_eye = NULL
+  manual_eye = NULL,
+  with_projection = FALSE
 ) {
   # --- 1. Auto-detect & SORT Axis Columns ---
 
@@ -244,46 +245,84 @@ plot_3d_ordination_auto <- function(
   }
 
   # --- 3. Build the Plot ---
-  fig <- plotly::plot_ly(
-    data = data,
-    x = ~ .data[[x_c]],
-    y = ~ .data[[y_c]],
-    z = ~ .data[[z_c]],
-    color = ~ .data[[group_col]],
-    colors = color_list,
-    type = "scatter3d",
-    mode = "markers",
-    marker = list(
-      size = 5,
-      width = 2,
-      opacity = 0.9,
-      line = list(color = 'white', width = 1)
-    ),
-    projection = list(
-      x = list(show = TRUE, opacity = 0.2, scale = 1),
-      y = list(show = TRUE, opacity = 0.2, scale = 1),
-      z = list(show = TRUE, opacity = 0.2, scale = 1)
-    ),
-    text = ~ paste0(
-      "<b>Sample:</b> ",
-      .data[[sample_col]],
-      "<br><b>Group:</b> ",
-      .data[[group_col]],
-      "<br><b>",
-      x_c,
-      ":</b> ",
-      round(.data[[x_c]], 3),
-      "<br><b>",
-      y_c,
-      ":</b> ",
-      round(.data[[y_c]], 3),
-      "<br><b>",
-      z_c,
-      ":</b> ",
-      round(.data[[z_c]], 3)
-    ),
-    hoverinfo = "text"
-  )
+  if (with_projection) {
+    fig <- plotly::plot_ly(
+      data = data,
+      x = ~ .data[[x_c]],
+      y = ~ .data[[y_c]],
+      z = ~ .data[[z_c]],
+      color = ~ .data[[group_col]],
+      colors = color_list,
+      type = "scatter3d",
+      mode = "markers",
+      marker = list(
+        size = 5,
+        width = 2,
+        opacity = 0.9,
+        line = list(color = 'white', width = 1)
+      ),
+      projection = list(
+        x = list(show = TRUE, opacity = 0.1, scale = 1),
+        y = list(show = TRUE, opacity = 0.1, scale = 1),
+        z = list(show = TRUE, opacity = 0.1, scale = 1)
+      ),
+      text = ~ paste0(
+        "<b>Sample:</b> ",
+        .data[[sample_col]],
+        "<br><b>Group:</b> ",
+        .data[[group_col]],
+        "<br><b>",
+        x_c,
+        ":</b> ",
+        round(.data[[x_c]], 3),
+        "<br><b>",
+        y_c,
+        ":</b> ",
+        round(.data[[y_c]], 3),
+        "<br><b>",
+        z_c,
+        ":</b> ",
+        round(.data[[z_c]], 3)
+      ),
+      hoverinfo = "text"
+    )
+  } else {
+    fig <- plotly::plot_ly(
+      data = data,
+      x = ~ .data[[x_c]],
+      y = ~ .data[[y_c]],
+      z = ~ .data[[z_c]],
+      color = ~ .data[[group_col]],
+      colors = color_list,
+      type = "scatter3d",
+      mode = "markers",
+      marker = list(
+        size = 5,
+        width = 2,
+        opacity = 0.9,
+        line = list(color = 'white', width = 1)
+      ),
+      text = ~ paste0(
+        "<b>Sample:</b> ",
+        .data[[sample_col]],
+        "<br><b>Group:</b> ",
+        .data[[group_col]],
+        "<br><b>",
+        x_c,
+        ":</b> ",
+        round(.data[[x_c]], 3),
+        "<br><b>",
+        y_c,
+        ":</b> ",
+        round(.data[[y_c]], 3),
+        "<br><b>",
+        z_c,
+        ":</b> ",
+        round(.data[[z_c]], 3)
+      ),
+      hoverinfo = "text"
+    )
+  }
 
   # --- 4. Setup Layout ---
   fig <- plotly::layout(
@@ -512,3 +551,180 @@ save_3d_rotation <- function(
 
   message(paste("Success! Animation saved to:", normalizePath(filename)))
 }
+
+
+run_permdisp <- function(
+  mpse_object,
+  metadata_df_paired,
+  group__,
+  colors_list,
+  p1_title,
+  p2_title,
+  comparisons_list
+) {
+  # --- STEP 0: Safety Check & Factor Standardization ---
+  # Filter metadata to only include samples present in the MPSE object first
+  # (to avoid checking groups that won't even be plotted)
+  valid_samples <- rownames(mpse_object) # or specific extraction depending on object type
+  if (inherits(mpse_object, "MPSE") || inherits(mpse_object, "tbl_mpse")) {
+    # MPSE usually requires extracting dist first to know valid samples,
+    # but for this check, we look at the raw metadata provided.
+  }
+
+  # 1. Sanitize Data
+  # Ensure the group column exists
+  if (!group__ %in% colnames(metadata_df_paired)) {
+    stop(paste("Error: Column", group__, "not found in metadata."))
+  }
+
+  # Get groups present in data
+  present_groups <- unique(na.omit(metadata_df_paired[[group__]]))
+
+  # 2. Validate Colors
+  if (!is.null(names(colors_list))) {
+    # Check for missing colors
+    missing <- setdiff(present_groups, names(colors_list))
+    if (length(missing) > 0) {
+      stop(paste(
+        "Error: The following groups in data are missing from colors_list:",
+        paste(missing, collapse = ", ")
+      ))
+    }
+    # Force Group to Factor with levels defined by colors_list
+    # This aligns the data internal integer codes with the vector names
+    metadata_df_paired[[group__]] <- factor(
+      metadata_df_paired[[group__]],
+      levels = names(colors_list)
+    )
+  } else {
+    warning("colors_list is unnamed. Assigning colors by default factor order.")
+    metadata_df_paired[[group__]] <- as.factor(metadata_df_paired[[group__]])
+  }
+
+  # --- STEP 1: Calculate Distance & PERMDISP ---
+  dist_rdp_ <- mpse_object %>%
+    MicrobiotaProcess::mp_extract_dist(distmethod = "bray")
+
+  dist_rdp_samples <- labels(dist_rdp_)
+
+  metadata_df_ <- metadata_df_paired %>%
+    dplyr::filter(sample %in% dist_rdp_samples) %>%
+    dplyr::arrange(match(sample, dist_rdp_samples))
+
+  # Recalculate factor to drop unused levels (if any samples were filtered out)
+  metadata_df_[[group__]] <- droplevels(metadata_df_[[group__]])
+
+  disp_rdp <- vegan::betadisper(dist_rdp_, metadata_df_[[group__]])
+  disp_rdp_pt <- vegan::permutest(disp_rdp)
+
+  # --- STEP 2: Prepare Data Frames ---
+
+  # A. Points
+  disp_rdp_points_df <- as.data.frame(disp_rdp$vectors)
+  # IMPORTANT: Inherit the factor levels from metadata_df_
+  disp_rdp_points_df$Group <- metadata_df_[[group__]]
+  disp_rdp_points_df$Sample <- rownames(disp_rdp_points_df)
+
+  # B. Centroids
+  disp_rdp_centroids_df <- as.data.frame(disp_rdp$centroids)
+  # Rownames of centroids are the group names. Convert using same factor levels.
+  disp_rdp_centroids_df$Group <- factor(
+    rownames(disp_rdp_centroids_df),
+    levels = levels(metadata_df_[[group__]])
+  )
+
+  # C. Merged (for segments)
+  disp_rdp_merged <- disp_rdp_points_df %>%
+    dplyr::left_join(
+      disp_rdp_centroids_df,
+      by = "Group",
+      suffix = c("_sample", "_centroid")
+    )
+
+  # D. Distances
+  disp_rdp_dist_df <- data.frame(
+    Group = metadata_df_[[group__]],
+    Distance = disp_rdp$distances
+  )
+
+  # --- STEP 3: Plotting ---
+
+  # Plot 1: PCoA
+  p1 <- ggplot() +
+    geom_segment(
+      data = disp_rdp_merged,
+      aes(
+        x = PCoA1_sample,
+        y = PCoA2_sample,
+        xend = PCoA1_centroid,
+        yend = PCoA2_centroid,
+        color = Group
+      ),
+      alpha = 0.5
+    ) +
+    geom_point(
+      data = disp_rdp_points_df,
+      aes(PCoA1, PCoA2, color = Group),
+      size = 3
+    ) +
+    geom_point(
+      data = disp_rdp_centroids_df,
+      aes(PCoA1, PCoA2, color = Group),
+      size = 6,
+      shape = 4,
+      stroke = 2
+    ) +
+    scale_color_manual(values = colors_list) + # Use valid named list
+    labs(x = "PCoA1", y = "PCoA2", title = p1_title) +
+    theme_pubr() +
+    theme(
+      legend.position = "none",
+      plot.title = element_text(hjust = 0.5, face = "bold")
+    )
+
+  # Plot 2: Boxplot
+  max_val <- max(disp_rdp_dist_df$Distance, na.rm = TRUE)
+
+  p2 <- ggplot(disp_rdp_dist_df, aes(Group, Distance, fill = Group)) +
+    geom_violin(aes(color = Group), alpha = 0.3, trim = FALSE) +
+    geom_boxplot(width = 0.1, fill = "white", outlier.shape = NA, alpha = 0.8) +
+    ggsignif::geom_signif(
+      comparisons = comparisons_list,
+      test = "wilcox.test",
+      y_position = max_val * 1.1,
+      step_increase = 0.2,
+      tip_length = 0.02,
+      map_signif_level = function(p) {
+        insight::format_p(p, stars = TRUE, digits = "apa")
+      }
+    ) +
+    scale_color_manual(values = colors_list) +
+    scale_fill_manual(values = colors_list) +
+    scale_y_continuous(expand = expansion(mult = c(0.05, 0.2))) +
+    labs(x = NULL, y = "Distance to Centroid", title = p2_title) +
+    theme_pubr() +
+    theme(
+      legend.position = "none",
+      plot.title = element_text(hjust = 0.5, face = "bold")
+    )
+
+  p3 <- p1 + p2
+
+  return(list(
+    "disp_rdp" = disp_rdp,
+    "disp_rdp_pt" = disp_rdp_pt,
+    "picture" = p3
+  ))
+}
+
+
+# Define a clean academic theme
+academic_theme <- theme_classic(base_size = 14) +
+  theme(
+    plot.title = element_text(face = "bold", size = 16, hjust = 0.5),
+    plot.subtitle = element_text(size = 12, color = "gray30", hjust = 0.5),
+    axis.text = element_text(color = "black", size = 12),
+    axis.title = element_text(face = "bold", size = 13),
+    legend.position = "none", # Hide legend if x-axis labels are sufficient
+    panel.grid.major.y = element_line(color = "gray90", size = 0.5) # Light grid for reference
+  )
