@@ -620,32 +620,33 @@ run_permdisp <- function(
   # --- STEP 2: Prepare Data Frames ---
 
   # A. Points
-  disp_rdp_points_df <- as.data.frame(disp_rdp$vectors)
-  # IMPORTANT: Inherit the factor levels from metadata_df_
-  disp_rdp_points_df$Group <- metadata_df_[[group__]]
-  disp_rdp_points_df$Sample <- rownames(disp_rdp_points_df)
+  disp_rdp_points_df <-
+    disp_rdp$vectors %>%
+    tibble::as_tibble(rownames = "sample") %>%
+    dplyr::left_join(metadata_df_)
 
   # B. Centroids
-  disp_rdp_centroids_df <- as.data.frame(disp_rdp$centroids)
-  # Rownames of centroids are the group names. Convert using same factor levels.
-  disp_rdp_centroids_df$Group <- factor(
-    rownames(disp_rdp_centroids_df),
-    levels = levels(metadata_df_[[group__]])
-  )
+  disp_rdp_centroids_df <-
+    disp_rdp$centroids %>%
+    tibble::as_tibble(rownames = "sample")
+  disp_rdp_centroids_df[[group__]] <- as.factor(disp_rdp_centroids_df[[
+    group__
+  ]])
 
   # C. Merged (for segments)
   disp_rdp_merged <- disp_rdp_points_df %>%
     dplyr::left_join(
       disp_rdp_centroids_df,
-      by = "Group",
+      by = group__,
       suffix = c("_sample", "_centroid")
     )
 
   # D. Distances
-  disp_rdp_dist_df <- data.frame(
-    Group = metadata_df_[[group__]],
-    Distance = disp_rdp$distances
-  )
+  disp_rdp_dist_df <-
+    disp_rdp$distances %>%
+    tibble::as_tibble(rownames = "sample") %>%
+    dplyr::rename(distance = value) %>%
+    dplyr::left_join(metadata_df_)
 
   # --- STEP 3: Plotting ---
 
@@ -658,18 +659,18 @@ run_permdisp <- function(
         y = PCoA2_sample,
         xend = PCoA1_centroid,
         yend = PCoA2_centroid,
-        color = Group
+        color = !!rlang::sym(group__)
       ),
       alpha = 0.5
     ) +
     geom_point(
       data = disp_rdp_points_df,
-      aes(PCoA1, PCoA2, color = Group),
+      aes(PCoA1, PCoA2, color = !!rlang::sym(group__)),
       size = 3
     ) +
     geom_point(
       data = disp_rdp_centroids_df,
-      aes(PCoA1, PCoA2, color = Group),
+      aes(PCoA1, PCoA2, color = !!rlang::sym(group__)),
       size = 6,
       shape = 4,
       stroke = 2
@@ -683,10 +684,13 @@ run_permdisp <- function(
     )
 
   # Plot 2: Boxplot
-  max_val <- max(disp_rdp_dist_df$Distance, na.rm = TRUE)
+  max_val <- max(disp_rdp_dist_df$distance, na.rm = TRUE)
 
-  p2 <- ggplot(disp_rdp_dist_df, aes(Group, Distance, fill = Group)) +
-    geom_violin(aes(color = Group), alpha = 0.3, trim = FALSE) +
+  p2 <- ggplot(
+    disp_rdp_dist_df,
+    aes(!!rlang::sym(group__), distance, fill = Group)
+  ) +
+    geom_violin(aes(color = !!rlang::sym(group__)), alpha = 0.3, trim = FALSE) +
     geom_boxplot(width = 0.1, fill = "white", outlier.shape = NA, alpha = 0.8) +
     ggsignif::geom_signif(
       comparisons = comparisons_list,
